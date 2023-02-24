@@ -21,7 +21,7 @@
                     (assoc :orders-file (or orders-file
                                             "resources/small-orders.json")))]
      (log/infof "Running with the following config: %s" config)
-     (kitchen/receive-orders)
+     (kitchen/receive-orders config)
      (kitchen/simulate-orders config))))
 
 (defn -main
