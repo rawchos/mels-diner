@@ -7,6 +7,21 @@
 
 (def orders-intake (chan))
 
+(def kitchen-status
+  "Sets the initial default status. Capacity for each shelf can be overridden
+   from the config during kitchen preperation."
+  (agent {:orders-placed 0
+          :orders-delivered 0
+          :orders-not-delivered 0
+          :shelves {:hot      {:capacity 10
+                               :orders '()}
+                    :cold     {:capacity 10
+                               :orders '()}
+                    :frozen   {:capacity 10
+                               :orders '()}
+                    :overflow {:capacity 15
+                               :orders '()}}}))
+
 (defn seconds->millis [seconds]
   (* seconds 1000))
 
@@ -26,17 +41,6 @@
   (close! orders-intake))
 
 ;; Expected kitchen status?
-{:orders-placed 0
- :orders-delivered 0
- :orders-not-delivered 0
- :shelves {:hot      {:capacity 10
-                      :orders '()}
-           :cold     {:capacity 10
-                      :orders '()}
-           :frozen   {:capacity 10
-                      :orders '()}
-           :overflow {:capacity 15
-                      :orders '()}}}
 
 (defn same-order?
   "Checks to see if 2 orders are equivalent based on their order id."
@@ -81,8 +85,7 @@
   [order delay-seconds]
   (go
     (<! (timeout (seconds->millis delay-seconds)))
-    (log/infof "Would be picking up order id %s now once kitchen status is setup."
-               (:id order))))
+    (send kitchen-status deliver-order order)))
 
 (defn receive-orders
   [{{:keys [min-courier-delay max-courier-delay]} :kitchen}]
@@ -92,10 +95,24 @@
       (let [delayed-pickup (->> (inc max-courier-delay)
                                 (range min-courier-delay)
                                 rand-nth)]
-        (log/infof "Dispatching courier to pickup order id %s from the %s shelf in %d seconds"
+        (log/infof "Dispatching courier to pickup order id [%s] from the %s shelf in %d seconds"
                    id temp delayed-pickup)
         (dispatch-courier order delayed-pickup))
       (recur))))
+
+(defn override-defaults [kitchen-defaults {{:keys [shelves]} :kitchen}]
+  (reduce-kv (fn [m shelf {:keys [capacity]}]
+               (assoc-in m [:shelves shelf :capacity] capacity))
+             kitchen-defaults
+             shelves))
+
+;; TODO: Add kitchen-status watcher for printing out changes.
+(defn prepare-kitchen
+  "Sets up the kitchen and prepares it to receive orders."
+  [config]
+  (send kitchen-status override-defaults config)
+  (receive-orders config))
+
 
 (comment
   (receive-orders {:kitchen {:min-courier-delay 2

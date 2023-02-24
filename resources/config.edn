@@ -1,4 +1,8 @@
 {:ingestion-count 2
  :ingestion-rate  1
  :kitchen {:min-courier-delay 2
-           :max-courier-delay 6}}
+           :max-courier-delay 6
+           :shelves {:hot      {:capacity 10}
+                     :cold     {:capacity 10}
+                     :frozen   {:capacity 10}
+                     :overflow {:capacity 15}}}}

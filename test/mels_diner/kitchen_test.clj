@@ -61,3 +61,12 @@
                         :overflow {:orders '({:id "order 3" :temp "hot"}
                                              {:id "order 4" :temp "hot"})}}}
              (kitchen/deliver-order kitchen-status {:id "order 5" :temp "cold"}))))))
+
+(deftest override-defaults-test
+  (testing "should override capacity defaults with values from config"
+    (is (= {:shelves {:hot {:capacity 15 :orders '()}
+                      :cold {:capacity 20 :orders '()}}}
+           (kitchen/override-defaults {:shelves {:hot {:capacity 10 :orders '()}
+                                                 :cold {:capacity 10 :orders '()}}}
+                                      {:kitchen {:shelves {:hot {:capacity 15}
+                                                           :cold {:capacity 20}}}})))))

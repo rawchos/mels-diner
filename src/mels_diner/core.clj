@@ -11,6 +11,8 @@
 ;;       Also, be aware of when program execution stops and if we still have
 ;;       go processes in flight. Might need a check in here that's waiting for
 ;;       kitchen shutdown notification.
+;;
+;;       Use shutdown-agents when we're all done working
 (defn run-simulation
   "Kicks off the orders simulation. It takes in a file of simulation orders or
    defaults to `resources/small-orders.json` if nothing specified. The kitchen
@@ -21,7 +23,7 @@
                     (assoc :orders-file (or orders-file
                                             "resources/small-orders.json")))]
      (log/infof "Running with the following config: %s" config)
-     (kitchen/receive-orders config)
+     (kitchen/prepare-kitchen config)
      (kitchen/simulate-orders config))))
 
 (defn -main
