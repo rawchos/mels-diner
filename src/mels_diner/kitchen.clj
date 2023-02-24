@@ -64,6 +64,57 @@
   [orders order]
   (remove (partial same-order? order) orders))
 
+(defn has-capacity?
+  "Determines if a shelf has capacity to add another order."
+  [{:keys [capacity orders]}]
+  (< (count orders) capacity))
+
+(defn add-to-shelf
+  "Adds an order to the specified shelf and increments the number of orders
+   placed."
+  [kitchen-status shelf order]
+  (-> kitchen-status
+      (update :orders-placed inc)
+      (update-in [:shelves shelf] conj order)))
+
+;; TODO: Probably loop and recur through the reversed list of overflow orders. Then
+;;       check if that shelf has-capacity? If so, return the order. If not, continue
+;;       on to the next. If no more orders to loop through, return nil.
+(defn find-order-to-shuffle
+  "Finds an order from the overflow shelf that can be moved to its actual shelf
+   according to the temp. Returns `nil` if no orders found."
+  [kitchen-status])
+
+;; Check for capacity on one of the shelves for one of the orders. Start from the
+;; end of the list of orders in overflow because I think this *should* give the
+;; best chance of getting as many orders delivered as possible. If one of the
+;; orders isn't able to be moved over, drop the last one in the list.
+;; 
+;; add-to-shelf :shelf-from-order-moving order-thats-moving
+;; remove that order from overflow
+;; or
+;; drop-last from overflow
+(defn shuffle-or-drop-overflow [kitchen-status])
+
+(defn place-order
+  "Places an order on its expected shelf according to temperature. If there isn't
+   room on its expected shelf, it then defaults to placing on the overflow shelf.
+   If there isn't room on the overflow shelf, it will attempt to move an order
+   from overflow to a shelf with capacity. If unable to move an order, drops
+   the oldest order from the overflow shelf."
+  [kitchen-status {:keys [temp] :as order}]
+  (let [expected-shelf (keyword temp)]
+    (cond 
+      (has-capacity? (get-in kitchen-status [:shelves expected-shelf]))
+      (add-to-shelf kitchen-status expected-shelf order)
+      
+      (has-capacity? (get-in kitchen-status [:shelves :overflow]))
+      (add-to-shelf kitchen-status :overflow order)
+      
+      :else
+      (-> (shuffle-or-drop-overflow kitchen-status)
+          (add-to-shelf :overflow order)))))
+
 (defn deliver-order
   "Looks for an order on it's expected shelf in the kitchen or on the overflow
    shelf and removes it for delivery. Doesn't remove anything if the order isn't

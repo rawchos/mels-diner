@@ -70,3 +70,9 @@
                                                  :cold {:capacity 10 :orders '()}}}
                                       {:kitchen {:shelves {:hot {:capacity 15}
                                                            :cold {:capacity 20}}}})))))
+
+;; TODO: Tests for all these
+(deftest has-capacity?-test)
+(deftest add-to-shelf-test)
+(deftest find-order-to-shuffle-test)
+(deftest shuffle-or-drop-overflow-test)
