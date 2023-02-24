@@ -22,6 +22,13 @@
                     :overflow {:capacity 15
                                :orders '()}}}))
 
+(defn watch-status-changes
+  "Watches the kitchen status and prints the current status every time it changes."
+  []
+  (let [watch-fn (fn [k _ref _old-status new-status]
+                   (log/infof "[%s] Kitchen status updated: %s" k new-status))]
+    (add-watch kitchen-status :change-notification watch-fn)))
+
 (defn seconds->millis [seconds]
   (* seconds 1000))
 
@@ -39,8 +46,6 @@
       (go (>! orders-intake order)))
     (<!! (timeout (seconds->millis ingestion-rate))))
   (close! orders-intake))
-
-;; Expected kitchen status?
 
 (defn same-order?
   "Checks to see if 2 orders are equivalent based on their order id."
@@ -85,6 +90,7 @@
   [order delay-seconds]
   (go
     (<! (timeout (seconds->millis delay-seconds)))
+    (log/infof "Picking up order [%s]" (:id order))
     (send kitchen-status deliver-order order)))
 
 (defn receive-orders
@@ -111,6 +117,7 @@
   "Sets up the kitchen and prepares it to receive orders."
   [config]
   (send kitchen-status override-defaults config)
+  (watch-status-changes)
   (receive-orders config))
 
 
