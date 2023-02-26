@@ -1,6 +1,4 @@
 (ns mels-diner.kitchen
-  ;; TODO: Maybe just alias core.async because this is getting to 
-  ;;       be a large refer list
   (:require [clojure.core.async :refer [chan close! go go-loop timeout <! <!! >!]]
             [mels-diner.util :as util]
             [taoensso.timbre :as log]))
@@ -82,7 +80,7 @@
 (defn find-order-to-shuffle
   "Finds an order from the overflow shelf that can be moved to its actual shelf
    according to the temp. Returns `nil` if no orders found."
-  [{{:keys [shelves]} :kitchen}]
+  [{:keys [shelves]}]
   (loop [orders (-> shelves :overflow :orders reverse)
          checked-shelves #{}]
     (if-let [{:keys [temp] :as order} (first orders)]
@@ -173,30 +171,9 @@
              kitchen-defaults
              shelves))
 
-;; TODO: Add kitchen-status watcher for printing out changes.
 (defn prepare-kitchen
   "Sets up the kitchen and prepares it to receive orders."
   [config]
   (send kitchen-status override-defaults config)
   (watch-status-changes)
   (receive-orders config))
-
-
-(comment
-  (receive-orders {:kitchen {:min-courier-delay 2
-                             :max-courier-delay 6}})
-  (simulate-orders {:orders-file "resources/small-orders.json"
-                    :ingestion-count 2
-                    :ingestion-rate 1})
-  
-  (conj '(:one :two :three) :four)
-  (drop-last '(:one :two :three))
-  
-  (rand-nth (range 2 (inc 6)))
-  
-  (let [some-status {:shelves {:overflow {:capacity 10
-                                          :orders '({:id "order 1"}
-                                                    {:id "order 2"})}}}]
-    (update-in some-status [:shelves :overflow :orders] drop-last))
-  
-  )
