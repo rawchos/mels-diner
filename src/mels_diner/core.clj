@@ -6,13 +6,13 @@
 
 (defn run-simulation
   "Kicks off the orders simulation. It takes in a file of simulation orders or
-   defaults to `resources/small-orders.json` if nothing specified. The kitchen
+   defaults to `resources/orders.json` if nothing specified. The kitchen
    is configured based off the `resources/config.edn` file."
-  ([] (run-simulation "resources/small-orders.json"))
+  ([] (run-simulation "resources/orders.json"))
   ([orders-file]
    (let [config (-> (cfg/get-config)
                     (assoc :orders-file (or orders-file
-                                            "resources/small-orders.json")))]
+                                            "resources/orders.json")))]
      (log/infof "Running with the following config: %s" config)
      (kitchen/prepare-kitchen config)
      (kitchen/simulate-orders config)
