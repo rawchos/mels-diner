@@ -70,31 +70,39 @@
   (< (count orders) capacity))
 
 (defn add-to-shelf
-  "Adds an order to the specified shelf and increments the number of orders
-   placed."
+  "Adds an order to the specified shelf."
   [kitchen-status shelf order]
-  (-> kitchen-status
-      (update :orders-placed inc)
-      (update-in [:shelves shelf] conj order)))
+  (update-in kitchen-status [:shelves shelf :orders] conj order))
 
-;; TODO: Probably loop and recur through the reversed list of overflow orders. Then
-;;       check if that shelf has-capacity? If so, return the order. If not, continue
-;;       on to the next. If no more orders to loop through, return nil.
+(defn remove-from-shelf
+  "Removes an order from the specified shelf."
+  [kitchen-status shelf order]
+  (update-in kitchen-status [:shelves shelf :orders] remove-order order))
+
 (defn find-order-to-shuffle
   "Finds an order from the overflow shelf that can be moved to its actual shelf
    according to the temp. Returns `nil` if no orders found."
-  [kitchen-status])
+  [{{:keys [shelves]} :kitchen}]
+  (loop [orders (-> shelves :overflow :orders reverse)
+         checked-shelves #{}]
+    (if-let [{:keys [temp] :as order} (first orders)]
+      (if (and (not (contains? checked-shelves temp))
+               (has-capacity? (get shelves (keyword temp))))
+        order
+        (recur (rest orders) (conj checked-shelves temp)))
+      nil)))
 
-;; Check for capacity on one of the shelves for one of the orders. Start from the
-;; end of the list of orders in overflow because I think this *should* give the
-;; best chance of getting as many orders delivered as possible. If one of the
-;; orders isn't able to be moved over, drop the last one in the list.
-;; 
-;; add-to-shelf :shelf-from-order-moving order-thats-moving
-;; remove that order from overflow
-;; or
-;; drop-last from overflow
-(defn shuffle-or-drop-overflow [kitchen-status])
+(defn shuffle-or-drop-overflow
+  "Attempts to move an order from the overflow shelf to its expected shelf by temp.
+   If no orders are found in the overflow shelf that can be moved to their expected
+   shelf, drops the last order from the overflow shelf. The dropped order becomes
+   waste and will not be delivered."
+  [kitchen-status]
+  (if-let [{:keys [temp] :as movable-order} (find-order-to-shuffle kitchen-status)]
+    (-> kitchen-status
+        (add-to-shelf (keyword temp) movable-order)
+        (remove-from-shelf :overflow movable-order))
+    (update-in kitchen-status [:shelves :overflow :orders] drop-last)))
 
 (defn place-order
   "Places an order on its expected shelf according to temperature. If there isn't
@@ -103,16 +111,17 @@
    from overflow to a shelf with capacity. If unable to move an order, drops
    the oldest order from the overflow shelf."
   [kitchen-status {:keys [temp] :as order}]
-  (let [expected-shelf (keyword temp)]
+  (let [expected-shelf     (keyword temp)
+        incremented-status (update kitchen-status :orders-placed inc)]
     (cond 
-      (has-capacity? (get-in kitchen-status [:shelves expected-shelf]))
-      (add-to-shelf kitchen-status expected-shelf order)
+      (has-capacity? (get-in incremented-status [:shelves expected-shelf]))
+      (add-to-shelf incremented-status expected-shelf order)
       
-      (has-capacity? (get-in kitchen-status [:shelves :overflow]))
-      (add-to-shelf kitchen-status :overflow order)
+      (has-capacity? (get-in incremented-status [:shelves :overflow]))
+      (add-to-shelf incremented-status :overflow order)
       
       :else
-      (-> (shuffle-or-drop-overflow kitchen-status)
+      (-> (shuffle-or-drop-overflow incremented-status)
           (add-to-shelf :overflow order)))))
 
 (defn deliver-order
@@ -125,12 +134,12 @@
       (order-exists? (get-in kitchen-status [:shelves expected-shelf :orders]) order)
       (-> kitchen-status
           (update :orders-delivered inc)
-          (update-in [:shelves expected-shelf :orders] remove-order order))
+          (remove-from-shelf expected-shelf order))
       
       (order-exists? (get-in kitchen-status [:shelves :overflow :orders]) order)
       (-> kitchen-status
           (update :orders-delivered inc)
-          (update-in [:shelves :overflow :orders] remove-order order))
+          (remove-from-shelf :overflow order))
       
       :else
       (update kitchen-status :orders-not-delivered inc))))
@@ -149,6 +158,7 @@
   (go-loop []
     (when-some [{:keys [id temp] :as order} (<! orders-intake)]
       (log/infof "Received this order: %s" order)
+      (send kitchen-status place-order order)
       (let [delayed-pickup (->> (inc max-courier-delay)
                                 (range min-courier-delay)
                                 rand-nth)]
@@ -183,5 +193,10 @@
   (drop-last '(:one :two :three))
   
   (rand-nth (range 2 (inc 6)))
+  
+  (let [some-status {:shelves {:overflow {:capacity 10
+                                          :orders '({:id "order 1"}
+                                                    {:id "order 2"})}}}]
+    (update-in some-status [:shelves :overflow :orders] drop-last))
   
   )

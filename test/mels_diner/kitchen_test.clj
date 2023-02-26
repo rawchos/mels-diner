@@ -72,6 +72,7 @@
                                                            :cold {:capacity 20}}}})))))
 
 ;; TODO: Tests for all these
+(deftest remove-from-shelf-test)
 (deftest has-capacity?-test)
 (deftest add-to-shelf-test)
 (deftest find-order-to-shuffle-test)
