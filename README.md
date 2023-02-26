@@ -54,6 +54,14 @@ When moving an order from overflow to its expected shelf, we start checking from
 
 If we can't move an order from overflow due to capacity constraints, we need to drop an order from the overflow orders. We drop the last order because this is theoretically the oldest order already and we want to give the newer orders a chance of being picked up.
 
+### Delivering an order
+
+When delivering an order, we allow the delivery if it's on its expected shelf or on the overflow shelf.
+
+## Logging
+
+We log most activities around receiving and delivering orders and there's a watcher on the `kitchen-status` agent that notifies of changes and prints the current status. Due to the nature of the application, not all logging statements will line up with the change notification updates. I may look into tracking changes inside the kitchen status agent so they'll display along with the change notification but I'm not sure if I'll get the chance to do that.
+
 ## Side Note
 
 Close to the end of development on this, I had the thought that maybe I should change how I'm storing orders on shelves. Rather than storing the orders in a collection, like so:
