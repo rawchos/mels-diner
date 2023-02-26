@@ -1,5 +1,6 @@
 (ns mels-diner.kitchen
   (:require [clojure.core.async :refer [chan close! go go-loop timeout <! <!! >!]]
+            [clojure.pprint :refer [pprint]]
             [mels-diner.util :as util]
             [taoensso.timbre :as log]))
 
@@ -24,7 +25,8 @@
   "Watches the kitchen status and prints the current status every time it changes."
   []
   (let [watch-fn (fn [k _ref _old-status new-status]
-                   (log/infof "[%s] Kitchen status updated: %s" k new-status))]
+                   (log/infof "[%s] Kitchen status updated: \n%s"
+                              k (with-out-str (pprint new-status))))]
     (add-watch kitchen-status :change-notification watch-fn)))
 
 (defn seconds->millis [seconds]
@@ -177,3 +179,31 @@
   (send kitchen-status override-defaults config)
   (watch-status-changes)
   (receive-orders config))
+
+(defn orders-complete?
+  "Compares the number of orders placed against the sum of orders delivered and
+   not delivered."
+  []
+  (let [{:keys [orders-placed
+                orders-delivered
+                orders-not-delivered]} @kitchen-status]
+    (= orders-placed (+ orders-delivered orders-not-delivered))))
+
+(defn watch-for-completion
+  "Watch for all orders to either be delivered or dropped then shutdown the
+   agents threads. In case there's a discrepancy between the order placed and
+   the orders deliver/not delivered, loop 3 times using the max courier delay.
+   This should give enough time for everything to complete."
+  [{{:keys [max-courier-delay]} :kitchen}]
+  (loop [times (range 3)]
+    (if-let [_ (first times)]
+      (if (orders-complete?)
+        (do
+          (log/info "Order processing complete. Shutting down.")
+          (shutdown-agents))
+        (do
+          (<!! (timeout (seconds->millis max-courier-delay)))
+          (recur (rest times))))
+      (do
+        (log/info "Discrepancy in orders placed vs orders (not) delivered. Shutting down.")
+        (shutdown-agents)))))
