@@ -264,3 +264,19 @@
                                                       :orders '({:id "cold 1" :temp "cold"}
                                                                 {:id "cold 2" :temp "cold"})}}}
                                 {:id "hot 3" :temp "hot"})))))
+
+(deftest orders-complete?-test
+  (testing "processing should be complete if orders placed equals the sum of orders delivered and not delivered"
+    (is (true? (kitchen/orders-complete? {:orders-placed 10
+                                          :orders-delivered 5
+                                          :orders-not-delivered 5})))
+    (is (true? (kitchen/orders-complete? {:orders-placed 10
+                                          :orders-delivered 10
+                                          :orders-not-delivered 0})))
+    (is (true? (kitchen/orders-complete? {:orders-placed 10
+                                          :orders-delivered 0
+                                          :orders-not-delivered 10}))))
+  (testing "processing should not be complete if order counts don't match"
+    (is (false? (kitchen/orders-complete? {:orders-placed 10
+                                           :orders-delivered 5
+                                           :orders-not-delivered 4})))))

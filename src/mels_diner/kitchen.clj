@@ -183,11 +183,8 @@
 (defn orders-complete?
   "Compares the number of orders placed against the sum of orders delivered and
    not delivered."
-  []
-  (let [{:keys [orders-placed
-                orders-delivered
-                orders-not-delivered]} @kitchen-status]
-    (= orders-placed (+ orders-delivered orders-not-delivered))))
+  [{:keys [orders-placed orders-delivered orders-not-delivered]}]
+  (= orders-placed (+ orders-delivered orders-not-delivered)))
 
 (defn watch-for-completion
   "Watch for all orders to either be delivered or dropped then shutdown the
@@ -197,7 +194,7 @@
   [{{:keys [max-courier-delay]} :kitchen}]
   (loop [times (range 3)]
     (if-let [_ (first times)]
-      (if (orders-complete?)
+      (if (orders-complete? @kitchen-status)
         (do
           (log/info "Order processing complete. Shutting down.")
           (shutdown-agents))
