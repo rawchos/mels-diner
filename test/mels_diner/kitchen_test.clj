@@ -65,14 +65,16 @@
               :orders-not-delivered 0
               :shelves {:hot {:orders '({:id "order 2" :temp "hot"})}
                         :overflow {:orders '({:id "order 3" :temp "hot"}
-                                             {:id "order 4" :temp "hot"})}}}
+                                             {:id "order 4" :temp "hot"})}}
+              :changes ["Delivered order [order 1] from hot shelf and incremented orders delivered"]}
              (kitchen/deliver-order kitchen-status {:id "order 1" :temp "hot"}))))
     (testing "should increment orders delivered and remove from overflow shelf if found"
       (is (= {:orders-delivered 1
               :orders-not-delivered 0
               :shelves {:hot {:orders '({:id "order 1" :temp "hot"}
                                         {:id "order 2" :temp "hot"})}
-                        :overflow {:orders '({:id "order 3" :temp "hot"})}}}
+                        :overflow {:orders '({:id "order 3" :temp "hot"})}}
+              :changes ["Delivered order [order 4] from overflow shelf and incremented orders delivered"]}
              (kitchen/deliver-order kitchen-status {:id "order 4" :temp "hot"}))))
     (testing "should increment orders not delivered if not found on expected or overflow shelf"
       (is (= {:orders-delivered 0
@@ -80,20 +82,23 @@
               :shelves {:hot {:orders '({:id "order 1" :temp "hot"}
                                         {:id "order 2" :temp "hot"})}
                         :overflow {:orders '({:id "order 3" :temp "hot"}
-                                             {:id "order 4" :temp "hot"})}}}
+                                             {:id "order 4" :temp "hot"})}}
+              :changes ["Incremented orders not delivered for order [order 5]"]}
              (kitchen/deliver-order kitchen-status {:id "order 5" :temp "hot"})))
       (is (= {:orders-delivered 0
               :orders-not-delivered 1
               :shelves {:hot {:orders '({:id "order 1" :temp "hot"}
                                         {:id "order 2" :temp "hot"})}
                         :overflow {:orders '({:id "order 3" :temp "hot"}
-                                             {:id "order 4" :temp "hot"})}}}
+                                             {:id "order 4" :temp "hot"})}}
+              :changes ["Incremented orders not delivered for order [order 5]"]}
              (kitchen/deliver-order kitchen-status {:id "order 5" :temp "cold"}))))))
 
 (deftest override-defaults-test
   (testing "should override capacity defaults with values from config"
     (is (= {:shelves {:hot {:capacity 15 :orders '()}
-                      :cold {:capacity 20 :orders '()}}}
+                      :cold {:capacity 20 :orders '()}}
+            :changes ["Updated kitchen config"]}
            (kitchen/override-defaults {:shelves {:hot {:capacity 10 :orders '()}
                                                  :cold {:capacity 10 :orders '()}}}
                                       {:kitchen {:shelves {:hot {:capacity 15}
@@ -170,7 +175,8 @@
                              :orders '()}
                       :overflow {:capacity 5
                                  :orders '({:id "hot 2" :temp "hot"}
-                                           {:id "cold 1" :temp "cold"})}}}
+                                           {:id "cold 1" :temp "cold"})}}
+            :changes ["Moved order [hot 1] to hot shelf from overflow"]}
            (kitchen/shuffle-or-drop-overflow {:shelves {:hot {:capacity 1
                                                               :orders '()}
                                                         :cold {:capacity 0
@@ -186,7 +192,8 @@
                              :orders '()}
                       :overflow {:capacity 5
                                  :orders '({:id "hot 2" :temp "hot"}
-                                           {:id "hot 1" :temp "hot"})}}}
+                                           {:id "hot 1" :temp "hot"})}}
+            :changes ["Dropped last order from overflow"]}
            (kitchen/shuffle-or-drop-overflow {:shelves {:hot {:capacity 1
                                                               :orders '({:id "hot 3" :temp "hot"})}
                                                         :cold {:capacity 0
@@ -203,7 +210,8 @@
                             :orders '({:id "hot 1" :temp "hot"}
                                       {:id "hot 2" :temp "hot"})}
                       :overflow {:capacity 2
-                                 :orders '()}}}
+                                 :orders '()}}
+            :changes ["Incremented orders placed" "Added order [hot 1] to hot shelf"]}
            (kitchen/place-order {:orders-placed 9
                                  :shelves {:hot {:capacity 2
                                                  :orders '({:id "hot 2" :temp "hot"})}
@@ -216,7 +224,9 @@
                             :orders '({:id "hot 1" :temp "hot"}
                                       {:id "hot 2" :temp "hot"})}
                       :overflow {:capacity 2
-                                 :orders '({:id "hot 3" :temp "hot"})}}}
+                                 :orders '({:id "hot 3" :temp "hot"})}}
+            :changes ["Incremented orders placed"
+                      "Added order [hot 3] to overflow shelf"]}
            (kitchen/place-order {:orders-placed 9
                                  :shelves {:hot {:capacity 2
                                                  :orders '({:id "hot 1" :temp "hot"}
@@ -233,7 +243,10 @@
                              :orders '({:id "cold 2" :temp "cold"})}
                       :overflow {:capacity 2
                                  :orders '({:id "hot 3" :temp "hot"}
-                                           {:id "cold 1" :temp "cold"})}}}
+                                           {:id "cold 1" :temp "cold"})}}
+            :changes ["Incremented orders placed"
+                      "Moved order [cold 2] to cold shelf from overflow"
+                      "Added order [hot 3] to overflow shelf"]}
            (kitchen/place-order {:orders-placed 9
                                  :shelves {:hot {:capacity 2
                                                  :orders '({:id "hot 1" :temp "hot"}
@@ -253,7 +266,10 @@
                              :orders '()}
                       :overflow {:capacity 2
                                  :orders '({:id "hot 3" :temp "hot"}
-                                           {:id "cold 1" :temp "cold"})}}}
+                                           {:id "cold 1" :temp "cold"})}}
+            :changes ["Incremented orders placed"
+                      "Dropped last order from overflow"
+                      "Added order [hot 3] to overflow shelf"]}
            (kitchen/place-order {:orders-placed 9
                                  :shelves {:hot {:capacity 2
                                                  :orders '({:id "hot 1" :temp "hot"}
@@ -280,3 +296,15 @@
     (is (false? (kitchen/orders-complete? {:orders-placed 10
                                            :orders-delivered 5
                                            :orders-not-delivered 4})))))
+
+(deftest add-change-message-test
+  (testing "should add the change message to the current changes"
+    (is (= {:changes ["change message 1"
+                      "change message 2"]}
+           (kitchen/add-change-message {:changes ["change message 1"]} "change message 2")))
+    (is (= {:changes ["change message 1"
+                      "change message 2"]}
+           (kitchen/add-change-message {:changes ["change message 1"]} "change message 2" false))))
+  (testing "should overwrite what's currently in change messages"
+    (is (= {:changes ["new change message"]}
+           (kitchen/add-change-message {:changes ["existing change message"]} "new change message" true)))))

@@ -47,6 +47,16 @@
       (recur (rest all-orders))))
   (close! orders-intake))
 
+(defn add-change-message
+  "Adds a change message to the kitchen status with an optional flag to
+   overwrite what's currently there or just add to it."
+  ([kitchen-status message]
+   (add-change-message kitchen-status message false))
+  ([kitchen-status message overwrite?]
+   (if overwrite?
+     (assoc kitchen-status :changes [message])
+     (update kitchen-status :changes conj message))))
+
 (defn same-order?
   "Checks to see if 2 orders are equivalent based on their order id."
   [order1 order2]
@@ -98,11 +108,13 @@
    shelf, drops the last order from the overflow shelf. The dropped order becomes
    waste and will not be delivered."
   [kitchen-status]
-  (if-let [{:keys [temp] :as movable-order} (find-order-to-shuffle kitchen-status)]
+  (if-let [{:keys [id temp] :as movable-order} (find-order-to-shuffle kitchen-status)]
     (-> kitchen-status
         (add-to-shelf (keyword temp) movable-order)
-        (remove-from-shelf :overflow movable-order))
-    (update-in kitchen-status [:shelves :overflow :orders] drop-last)))
+        (remove-from-shelf :overflow movable-order)
+        (add-change-message (format "Moved order [%s] to %s shelf from overflow" id temp)))
+    (-> (update-in kitchen-status [:shelves :overflow :orders] drop-last)
+        (add-change-message (format "Dropped last order from overflow")))))
 
 (defn place-order
   "Places an order on its expected shelf according to temperature. If there isn't
@@ -110,39 +122,51 @@
    If there isn't room on the overflow shelf, it will attempt to move an order
    from overflow to a shelf with capacity. If unable to move an order, drops
    the oldest order from the overflow shelf."
-  [kitchen-status {:keys [temp] :as order}]
-  (let [expected-shelf     (keyword temp)
-        incremented-status (update kitchen-status :orders-placed inc)]
+  [kitchen-status {:keys [id temp] :as order}]
+  (let [expected-shelf (keyword temp)
+        mutated-status (-> (update kitchen-status :orders-placed inc)
+                           (add-change-message "Incremented orders placed" true))]
     (cond 
-      (has-capacity? (get-in incremented-status [:shelves expected-shelf]))
-      (add-to-shelf incremented-status expected-shelf order)
+      (has-capacity? (get-in mutated-status [:shelves expected-shelf]))
+      (-> (add-to-shelf mutated-status expected-shelf order)
+          (add-change-message (format "Added order [%s] to %s shelf" id temp)))
       
-      (has-capacity? (get-in incremented-status [:shelves :overflow]))
-      (add-to-shelf incremented-status :overflow order)
+      (has-capacity? (get-in mutated-status [:shelves :overflow]))
+      (-> (add-to-shelf mutated-status :overflow order)
+          (add-change-message (format "Added order [%s] to overflow shelf" id)))
       
       :else
-      (-> (shuffle-or-drop-overflow incremented-status)
-          (add-to-shelf :overflow order)))))
+      (-> (shuffle-or-drop-overflow mutated-status)
+          (add-to-shelf :overflow order)
+          (add-change-message (format "Added order [%s] to overflow shelf" id))))))
 
 (defn deliver-order
-  "Looks for an order on it's expected shelf in the kitchen or on the overflow
+  "Looks for an order on its expected shelf in the kitchen or on the overflow
    shelf and removes it for delivery. Doesn't remove anything if the order isn't
    found. Determines order equality by order id."
-  [kitchen-status {:keys [temp] :as order}]
+  [kitchen-status {:keys [id temp] :as order}]
   (let [expected-shelf (keyword temp)]
     (cond
       (order-exists? (get-in kitchen-status [:shelves expected-shelf :orders]) order)
       (-> kitchen-status
           (update :orders-delivered inc)
-          (remove-from-shelf expected-shelf order))
+          (remove-from-shelf expected-shelf order)
+          (add-change-message (format (str "Delivered order [%s] from %s shelf "
+                                           "and incremented orders delivered")
+                                      id temp) true))
       
       (order-exists? (get-in kitchen-status [:shelves :overflow :orders]) order)
       (-> kitchen-status
           (update :orders-delivered inc)
-          (remove-from-shelf :overflow order))
+          (remove-from-shelf :overflow order)
+          (add-change-message (format (str "Delivered order [%s] from overflow "
+                                           "shelf and incremented orders delivered")
+                                      id) true))
       
       :else
-      (update kitchen-status :orders-not-delivered inc))))
+      (-> (update kitchen-status :orders-not-delivered inc)
+          (add-change-message (format "Incremented orders not delivered for order [%s]"
+                                      id) true)))))
 
 (defn dispatch-courier
   "Dispatches a courier to pickup a specific order from the kitchen after the
@@ -157,21 +181,22 @@
   [{{:keys [min-courier-delay max-courier-delay]} :kitchen}]
   (go-loop []
     (when-some [{:keys [id temp] :as order} (<! orders-intake)]
-      (log/infof "Received this order: %s" order)
+      (log/infof "Received order [%s]" order)
       (send kitchen-status place-order order)
       (let [delayed-pickup (->> (inc max-courier-delay)
                                 (range min-courier-delay)
                                 rand-nth)]
-        (log/infof "Dispatching courier to pickup order id [%s] from the %s shelf in %d seconds"
+        (log/infof "Dispatching courier to pickup order [%s] from the %s shelf in %d seconds"
                    id temp delayed-pickup)
         (dispatch-courier order delayed-pickup))
       (recur))))
 
 (defn override-defaults [kitchen-defaults {{:keys [shelves]} :kitchen}]
-  (reduce-kv (fn [m shelf {:keys [capacity]}]
-               (assoc-in m [:shelves shelf :capacity] capacity))
-             kitchen-defaults
-             shelves))
+  (-> (reduce-kv (fn [m shelf {:keys [capacity]}]
+                   (assoc-in m [:shelves shelf :capacity] capacity))
+                 kitchen-defaults
+                 shelves)
+      (add-change-message "Updated kitchen config" true)))
 
 (defn prepare-kitchen
   "Sets up the kitchen and prepares it to receive orders."
